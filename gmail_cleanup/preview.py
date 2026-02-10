@@ -58,3 +58,24 @@ def sample_messages(service: Resource, query: str, limit: int = 10) -> List[Dict
         )
 
     return out
+
+def iter_message_id_pages(service: Resource, query: str, page_size: int = BATCH_SIZE):
+    """
+    Yields lists of message IDs (pages).
+    """
+    token: Optional[str] = None
+    while True:
+        resp = service.users().messages().list(
+            userId="me",
+            q=query,
+            maxResults=page_size,
+            pageToken=token,
+        ).execute()
+        msgs = resp.get("messages", [])
+        ids = [m["id"] for m in msgs]
+        if ids:
+            yield ids
+        token = resp.get("nextPageToken")
+        if not token:
+            break
+
