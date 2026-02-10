@@ -1,3 +1,7 @@
+# Project
+reports/
+
+
 # Python
 __pycache__/
 *.py[cod]

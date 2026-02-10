@@ -11,6 +11,7 @@ from gmail_cleanup.query_builder import QueryOptions, build_query
 from gmail_cleanup.labels import get_or_create_label_id, apply_label_to_messages
 from gmail_cleanup.preview import iter_message_id_pages
 from gmail_cleanup.exporter import fetch_message_row, write_csv, write_json
+from gmail_cleanup.trash import iter_message_id_pages as iter_id_pages_trash, trash_message_ids
 
 
 console = Console()
@@ -300,4 +301,80 @@ def export(
         write_json(rows, out)
 
     console.print("\nDone.")
+
+
+@app.command()
+def trash(
+    label: str = typer.Option(..., help="ONLY trash messages in this label (recommended: cleanup/candidates)."),
+    sample: int = typer.Option(10, help="How many sample messages to show before trashing."),
+    execute: bool = typer.Option(False, "--execute", help="Actually perform the trash action."),
+    limit: int = typer.Option(0, help="Limit how many messages to trash (0 = no limit)."),
+):
+    """
+    Move messages to Trash. Safety: requires a cleanup/* label and explicit --execute.
+    """
+    if not label.startswith("cleanup/"):
+        console.print("[bold red]Refusing.[/bold red] For safety, --label must start with 'cleanup/'.")
+        raise typer.Exit(code=2)
+
+    built = f"label:{label}"
+    console.print("\n[bold]Trash scope query:[/bold]")
+    console.print(built)
+
+    service = get_gmail_service()
+
+    total = count_messages(service, built)
+    if total == 0:
+        console.print("\nNo matching messages. Nothing to trash.")
+        raise typer.Exit()
+
+    console.print(f"\nMatched {total} messages in label:{label}")
+
+    if sample > 0:
+        console.print("\n[bold]Sample messages:[/bold]")
+        rows = sample_messages(service, built, limit=sample)
+        st = Table()
+        st.add_column("Date")
+        st.add_column("From")
+        st.add_column("Subject")
+        for r in rows:
+            st.add_row(r["date"], r["from"], r["subject"])
+        console.print(st)
+
+    target_n = min(total, limit) if limit else total
+
+    console.print("\n[bold yellow]About to move messages to Trash (recoverable).[/bold yellow]")
+    console.print(f"Label: {label}")
+    console.print(f"Count: {target_n}")
+
+    if not execute:
+        console.print("\nDry-run only. Re-run with [bold]--execute[/bold] to perform trashing.")
+        raise typer.Exit()
+
+    phrase = f"TRASH {target_n}"
+    typed = typer.prompt(f"Type exactly: {phrase}", default="")
+    if typed != phrase:
+        console.print("Cancelled.")
+        raise typer.Exit(code=1)
+
+    done = 0
+    for ids in iter_id_pages_trash(service, built):
+        if limit:
+            remaining = max(0, limit - done)
+            batch = ids[:remaining]
+        else:
+            batch = ids
+
+        if not batch:
+            break
+
+        trash_message_ids(service, batch)
+        done += len(batch)
+        console.print(f"Trashed {done}/{target_n}")
+
+        if done >= target_n:
+            break
+
+    console.print("\nDone. Messages moved to Trash.")
+
 
