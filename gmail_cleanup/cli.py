@@ -4,6 +4,7 @@ from rich.console import Console
 from rich.table import Table
 from pathlib import Path
 from rich.progress import Progress
+import platform
 
 from gmail_cleanup.gmail import get_gmail_service
 from gmail_cleanup.preview import count_messages, sample_messages
@@ -12,6 +13,7 @@ from gmail_cleanup.labels import get_or_create_label_id, apply_label_to_messages
 from gmail_cleanup.preview import iter_message_id_pages
 from gmail_cleanup.exporter import fetch_message_row, write_csv, write_json
 from gmail_cleanup.trash import iter_message_id_pages as iter_id_pages_trash, trash_message_ids
+from gmail_cleanup.gmail import credentials_path, token_path, _app_data_dir, SCOPES
 
 
 console = Console()
@@ -376,5 +378,44 @@ def trash(
             break
 
     console.print("\nDone. Messages moved to Trash.")
+
+
+@app.command()
+def doctor():
+    """
+    Diagnose local setup and OAuth configuration.
+    """
+    console.print("\n[bold]gmail-cleanup doctor[/bold]\n")
+
+    console.print(f"OS: {platform.system()} {platform.release()}")
+    console.print(f"App data dir:\n  {_app_data_dir()}\n")
+
+    cred = credentials_path()
+    tok = token_path()
+
+    def status(path):
+        return "[green]OK[/green]" if path.exists() else "[red]MISSING[/red]"
+
+    console.print("Credentials:")
+    console.print(f"  credentials.json: {cred}  → {status(cred)}")
+    console.print("\nAuth token:")
+    console.print(f"  token.json:        {tok}   → {status(tok)}")
+
+    if not cred.exists():
+        console.print(
+            "\n[yellow]How to fix:[/yellow]\n"
+            "1) Create a Google Cloud project\n"
+            "2) Enable Gmail API\n"
+            "3) Create OAuth client (Desktop app)\n"
+            "4) Download credentials.json\n"
+            f"5) Copy it to:\n   {cred}\n"
+        )
+
+    console.print("\nOAuth scopes in use:")
+    for s in SCOPES:
+        console.print(f"  - {s}")
+
+    console.print("\n[dim]No changes were made.[/dim]")
+
 
 
