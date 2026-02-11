@@ -10,6 +10,7 @@ dependencies = [
   "google-api-python-client>=2.140",
   "google-auth>=2.30",
   "google-auth-oauthlib>=1.2",
+  "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -18,3 +19,7 @@ gmail-cleanup = "gmail_cleanup.cli:app"
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["gmail_cleanup"]
+

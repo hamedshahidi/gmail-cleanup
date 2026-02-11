@@ -16,8 +16,10 @@ from gmail_cleanup.trash import iter_message_id_pages as iter_id_pages_trash, tr
 from gmail_cleanup.gmail import credentials_path, token_path, _app_data_dir, SCOPES
 from gmail_cleanup.label_clear import iter_message_id_pages as iter_clear_pages, remove_label
 from gmail_cleanup.stats import collect_sender_counts_and_dates
+from gmail_cleanup.config import load_config, config_path, write_template
 
 
+CFG = load_config()
 console = Console()
 app = typer.Typer(add_completion=False, invoke_without_command=True)
 
@@ -56,13 +58,22 @@ def query(
     no_attachment: bool = typer.Option(False, help="Only emails WITHOUT attachments."),
     larger: str = typer.Option(None, help="Message larger than, e.g. 10M"),
     smaller: str = typer.Option(None, help="Message smaller than, e.g. 2M"),
-    sample: int = typer.Option(10, help="How many sample messages to show."),
+    sample: int | None = typer.Option(None, help="How many sample messages to show."),
 ):
     """
     Dry-run: show counts and samples for a query. No deletion.
     """
+
+    # ──────────────────────────────────────────────────────────────
+    # Safety validation
+    # ──────────────────────────────────────────────────────────────
     if has_attachment and no_attachment:
         raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
+
+    # ──────────────────────────────────────────────────────────────
+    # Apply CONFIG DEFAULTS (CLI overrides config)
+    # ──────────────────────────────────────────────────────────────
+    sample = sample if sample is not None else CFG.default_sample
 
     in_ = "inbox" if inbox else None
 
@@ -93,6 +104,9 @@ def query(
     console.print("\n[bold]Gmail query:[/bold]")
     console.print(built)
 
+    # ──────────────────────────────────────────────────────────────
+    # Gmail API calls
+    # ──────────────────────────────────────────────────────────────
     service = get_gmail_service()
 
     console.print("\n[bold]Counting...[/bold]")
@@ -108,6 +122,9 @@ def query(
     table.add_row("Without attachments", str(without_att))
     console.print(table)
 
+    # ──────────────────────────────────────────────────────────────
+    # Sample messages (config-controlled)
+    # ──────────────────────────────────────────────────────────────
     if sample > 0 and total > 0:
         console.print("\n[bold]Sample messages:[/bold]")
         rows = sample_messages(service, built, limit=sample)
@@ -138,7 +155,7 @@ def label(
     no_attachment: bool = typer.Option(False, help="Only emails WITHOUT attachments."),
     larger: str = typer.Option(None, help="Message larger than, e.g. 10M"),
     smaller: str = typer.Option(None, help="Message smaller than, e.g. 2M"),
-    target_label: str = typer.Option("cleanup/candidates", help="Label to apply to matched messages."),
+    target_label: str | None = typer.Option(None, help="Label to apply to matched messages."),
     limit: int = typer.Option(0, help="Limit how many messages to label (0 = no limit)."),
 ):
     """
@@ -146,6 +163,8 @@ def label(
     """
     if has_attachment and no_attachment:
         raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
+
+    target_label = target_label or CFG.default_target_label
 
     in_ = "inbox" if inbox else None
 
@@ -230,13 +249,15 @@ def export(
     smaller: str = typer.Option(None, help="Message smaller than, e.g. 2M"),
     out: Path = typer.Option(Path("reports/report.csv"), help="Output file path."),
     fmt: str = typer.Option("csv", "--format", help="csv or json"),
-    limit: int = typer.Option(200, help="Max messages to export (protects you from huge runs)."),
+    limit: int | None = typer.Option(None, help="Max messages to export"),
 ):
     """
     Export a report of matched emails (metadata only). No deletion.
     """
     if has_attachment and no_attachment:
         raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
+
+    limit = limit if limit is not None else CFG.default_export_limit
 
     in_ = "inbox" if inbox else None
 
@@ -313,6 +334,7 @@ def trash(
     sample: int = typer.Option(10, help="How many sample messages to show before trashing."),
     execute: bool = typer.Option(False, "--execute", help="Actually perform the trash action."),
     limit: int = typer.Option(0, help="Limit how many messages to trash (0 = no limit)."),
+    force: bool = typer.Option(False, "--force", help="Override safety limit from config."),
 ):
     """
     Move messages to Trash. Safety: requires a cleanup/* label and explicit --execute.
@@ -346,6 +368,16 @@ def trash(
         console.print(st)
 
     target_n = min(total, limit) if limit else total
+
+    if target_n > CFG.max_trash_without_force and not force:
+        console.print(
+            f"[bold red]Refusing.[/bold red] "
+            f"Attempting to trash {target_n} messages, "
+            f"but config max_trash_without_force is {CFG.max_trash_without_force}.\n"
+            f"Use --force if you are absolutely sure."
+        )
+        raise typer.Exit(code=2)
+
 
     console.print("\n[bold yellow]About to move messages to Trash (recoverable).[/bold yellow]")
     console.print(f"Label: {label}")
@@ -420,7 +452,6 @@ def doctor():
     console.print("\n[dim]No changes were made.[/dim]")
 
 
-
 @app.command()
 def label_clear(
     label: str = typer.Option(..., help="Label to remove (must start with cleanup/)."),
@@ -486,7 +517,7 @@ def stats(
     no_attachment: bool = typer.Option(False, help="Only emails WITHOUT attachments."),
     larger: str = typer.Option(None, help="Message larger than, e.g. 10M"),
     smaller: str = typer.Option(None, help="Message smaller than, e.g. 2M"),
-    scan_limit: int = typer.Option(500, help="How many messages to scan for stats (for speed)."),
+    scan_limit: int | None = typer.Option(None, help="How many messages to scan"),
     top: int = typer.Option(10, help="How many top senders to display."),
 ):
     """
@@ -494,6 +525,8 @@ def stats(
     """
     if has_attachment and no_attachment:
         raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
+
+    scan_limit = scan_limit if scan_limit is not None else CFG.default_scan_limit
 
     in_ = "inbox" if inbox else None
 
@@ -548,3 +581,25 @@ def stats(
 
     console.print()
     console.print(st)
+
+
+@app.command()
+def config(init: bool = typer.Option(False, "--init", help="Create config.yaml template (won't overwrite).")):
+    """
+    Show config location and currently loaded config values.
+    """
+    path = config_path()
+    if init:
+        created = write_template(overwrite=False)
+        console.print(f"Config template ensured at:\n  {created}")
+
+    cfg = load_config()
+    console.print("\n[bold]Config file:[/bold]")
+    console.print(f"  {path}")
+    console.print("\n[bold]Loaded config:[/bold]")
+    console.print(f"  default_target_label: {cfg.default_target_label}")
+    console.print(f"  max_trash_without_force: {cfg.max_trash_without_force}")
+    console.print(f"  default_export_limit: {cfg.default_export_limit}")
+    console.print(f"  default_scan_limit: {cfg.default_scan_limit}")
+    console.print(f"  default_sample: {cfg.default_sample}")
+
