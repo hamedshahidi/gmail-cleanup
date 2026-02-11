@@ -14,6 +14,7 @@ from gmail_cleanup.preview import iter_message_id_pages
 from gmail_cleanup.exporter import fetch_message_row, write_csv, write_json
 from gmail_cleanup.trash import iter_message_id_pages as iter_id_pages_trash, trash_message_ids
 from gmail_cleanup.gmail import credentials_path, token_path, _app_data_dir, SCOPES
+from gmail_cleanup.label_clear import iter_message_id_pages as iter_clear_pages, remove_label
 
 
 console = Console()
@@ -419,3 +420,48 @@ def doctor():
 
 
 
+@app.command()
+def label_clear(
+    label: str = typer.Option(..., help="Label to remove (must start with cleanup/)."),
+    limit: int = typer.Option(0, help="Limit how many messages to update (0 = all)."),
+):
+    """
+    Remove a cleanup/* label from messages (undo staging).
+    """
+    if not label.startswith("cleanup/"):
+        console.print("[bold red]Refusing.[/bold red] Label must start with 'cleanup/'.")
+        raise typer.Exit(code=2)
+
+    service = get_gmail_service()
+    label_id = get_or_create_label_id(service, label)
+
+    query = f"label:{label}"
+    total = count_messages(service, query)
+
+    if total == 0:
+        console.print("No messages found with that label.")
+        raise typer.Exit()
+
+    console.print(f"Removing label '{label}' from {total} messages.")
+
+    target_n = min(total, limit) if limit else total
+    done = 0
+
+    for ids in iter_clear_pages(service, query):
+        if limit:
+            remaining = max(0, limit - done)
+            batch = ids[:remaining]
+        else:
+            batch = ids
+
+        if not batch:
+            break
+
+        remove_label(service, label_id, batch)
+        done += len(batch)
+        console.print(f"Updated {done}/{target_n}")
+
+        if done >= target_n:
+            break
+
+    console.print("Done.")
