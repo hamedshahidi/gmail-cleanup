@@ -15,6 +15,7 @@ from gmail_cleanup.exporter import fetch_message_row, write_csv, write_json
 from gmail_cleanup.trash import iter_message_id_pages as iter_id_pages_trash, trash_message_ids
 from gmail_cleanup.gmail import credentials_path, token_path, _app_data_dir, SCOPES
 from gmail_cleanup.label_clear import iter_message_id_pages as iter_clear_pages, remove_label
+from gmail_cleanup.stats import collect_sender_counts_and_dates
 
 
 console = Console()
@@ -465,3 +466,85 @@ def label_clear(
             break
 
     console.print("Done.")
+
+
+@app.command()
+def stats(
+    q: str = typer.Option(None, help="Raw Gmail query (advanced)."),
+    from_: str = typer.Option(None, "--from", help="Sender email/address."),
+    to: str = typer.Option(None, help="Recipient email/address."),
+    subject: str = typer.Option(None, help="Subject contains."),
+    has_words: str = typer.Option(None, help="Has these words."),
+    not_has_words: str = typer.Option(None, help="Does NOT have these words."),
+    label_filter: str = typer.Option(None, "--label", help="Filter: only messages already in this Gmail label."),
+    inbox: bool = typer.Option(False, help="Shortcut for in:inbox"),
+    after: str = typer.Option(None, help="After date YYYY/MM/DD"),
+    before: str = typer.Option(None, help="Before date YYYY/MM/DD"),
+    older_than: str = typer.Option(None, help="e.g. 30d, 12m, 2y"),
+    newer_than: str = typer.Option(None, help="e.g. 7d"),
+    has_attachment: bool = typer.Option(False, help="Only emails WITH attachments."),
+    no_attachment: bool = typer.Option(False, help="Only emails WITHOUT attachments."),
+    larger: str = typer.Option(None, help="Message larger than, e.g. 10M"),
+    smaller: str = typer.Option(None, help="Message smaller than, e.g. 2M"),
+    scan_limit: int = typer.Option(500, help="How many messages to scan for stats (for speed)."),
+    top: int = typer.Option(10, help="How many top senders to display."),
+):
+    """
+    Show quick stats for a query (safe). Top senders are based on scanning first N messages.
+    """
+    if has_attachment and no_attachment:
+        raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
+
+    in_ = "inbox" if inbox else None
+
+    opts = QueryOptions(
+        q=q,
+        from_=from_,
+        to=to,
+        subject=subject,
+        has_words=has_words,
+        not_has_words=not_has_words,
+        label=label_filter,
+        in_=in_,
+        after=after,
+        before=before,
+        older_than=older_than,
+        newer_than=newer_than,
+        has_attachment=True if has_attachment else (False if no_attachment else None),
+        larger=larger,
+        smaller=smaller,
+    )
+    built = build_query(opts)
+
+    if not built:
+        console.print("[bold red]Refusing to run an empty query.[/bold red]")
+        raise typer.Exit(code=2)
+
+    console.print("\n[bold]Gmail query:[/bold]")
+    console.print(built)
+
+    service = get_gmail_service()
+
+    total = count_messages(service, built)
+    console.print(f"\nTotal matches: [bold]{total}[/bold]")
+
+    if total == 0:
+        raise typer.Exit()
+
+    scan_n = min(total, scan_limit) if scan_limit else total
+    console.print(f"Scanning first {scan_n} message(s) for stats...")
+
+    senders, oldest, newest = collect_sender_counts_and_dates(service, built, scan_limit=scan_n)
+
+    if oldest and newest:
+        console.print(f"\nDate range (sampled):\n  oldest: {oldest}\n  newest: {newest}")
+
+    st = Table(title=f"Top senders (based on first {scan_n})")
+    st.add_column("Sender")
+    st.add_column("Count", justify="right")
+
+    for sender, cnt in senders.most_common(top):
+        st.add_row(sender, str(cnt))
+
+    console.print()
+    console.print(st)
