@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections import Counter
 from email.utils import parsedate_to_datetime
-from typing import Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 from googleapiclient.discovery import Resource
+
+from gmail_cleanup.gmail_iter import iter_message_ids
 
 
 def _get_header(msg: dict, name: str) -> str:
@@ -14,31 +16,11 @@ def _get_header(msg: dict, name: str) -> str:
     return ""
 
 
-def iter_message_ids(service: Resource, query: str, limit: int = 500):
-    """
-    Yield message IDs up to limit.
-    """
-    token: Optional[str] = None
-    yielded = 0
-    while True:
-        resp = service.users().messages().list(
-            userId="me",
-            q=query,
-            maxResults=min(500, limit - yielded) if limit else 500,
-            pageToken=token,
-        ).execute()
-        msgs = resp.get("messages", [])
-        for m in msgs:
-            yield m["id"]
-            yielded += 1
-            if limit and yielded >= limit:
-                return
-        token = resp.get("nextPageToken")
-        if not token or not msgs:
-            return
-
-
-def collect_sender_counts_and_dates(service: Resource, query: str, scan_limit: int = 500) -> tuple[Counter, Optional[str], Optional[str]]:
+def collect_sender_counts_and_dates(
+    service: Resource,
+    query: str,
+    scan_limit: int = 500,
+) -> tuple[Counter, Optional[str], Optional[str]]:
     """
     Returns:
       - Counter of From header

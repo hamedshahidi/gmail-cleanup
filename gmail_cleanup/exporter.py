@@ -7,6 +7,8 @@ from typing import Dict, List
 
 from googleapiclient.discovery import Resource
 
+from gmail_cleanup.gmail_iter import iter_message_ids
+
 
 def _get_headers(msg: dict) -> Dict[str, str]:
     headers = msg.get("payload", {}).get("headers", [])
@@ -28,10 +30,14 @@ def fetch_message_row(service: Resource, msg_id: str) -> Dict[str, str]:
     ).execute()
 
     h = _get_headers(msg)
-    return {
-        "id": msg_id,
-        **h,
-    }
+    return {"id": msg_id, **h}
+
+
+def export_rows(service: Resource, query: str, limit: int = 200) -> List[Dict[str, str]]:
+    rows: List[Dict[str, str]] = []
+    for msg_id in iter_message_ids(service, query, limit=limit):
+        rows.append(fetch_message_row(service, msg_id))
+    return rows
 
 
 def write_csv(rows: List[Dict[str, str]], out_path: Path) -> None:

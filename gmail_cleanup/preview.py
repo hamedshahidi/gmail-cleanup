@@ -1,81 +1,65 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from email.utils import parsedate_to_datetime
+from typing import List
 
 from googleapiclient.discovery import Resource
 
-
-BATCH_SIZE = 500
+from gmail_cleanup.gmail_iter import iter_message_id_pages
 
 
 def count_messages(service: Resource, query: str) -> int:
+    """
+    Count how many messages match a Gmail query.
+    """
     total = 0
-    token: Optional[str] = None
-    while True:
-        resp = service.users().messages().list(
-            userId="me",
-            q=query,
-            maxResults=BATCH_SIZE,
-            pageToken=token,
-        ).execute()
-        total += len(resp.get("messages", []))
-        token = resp.get("nextPageToken")
-        if not token:
-            break
+    for ids in iter_message_id_pages(service, query):
+        total += len(ids)
     return total
 
 
-def sample_messages(service: Resource, query: str, limit: int = 10) -> List[Dict[str, str]]:
+def sample_messages(service: Resource, query: str, limit: int = 10) -> List[dict]:
     """
-    Returns list of {date, from, subject} for first N messages.
+    Return a small sample of messages with date, from, subject.
     """
-    resp = service.users().messages().list(
-        userId="me",
-        q=query,
-        maxResults=min(limit, 50),
-    ).execute()
+    rows: List[dict] = []
+    collected = 0
 
-    msgs = resp.get("messages", [])
-    if not msgs:
-        return []
+    for ids in iter_message_id_pages(service, query, limit=limit):
+        for msg_id in ids:
+            if collected >= limit:
+                return rows
 
-    out: List[Dict[str, str]] = []
-    for m in msgs[:limit]:
-        msg = service.users().messages().get(
-            userId="me",
-            id=m["id"],
-            format="metadata",
-            metadataHeaders=["Date", "From", "Subject"],
-        ).execute()
+            msg = service.users().messages().get(
+                userId="me",
+                id=msg_id,
+                format="metadata",
+                metadataHeaders=["From", "Date", "Subject"],
+            ).execute()
 
-        headers = {h["name"].lower(): h["value"] for h in msg.get("payload", {}).get("headers", [])}
-        out.append(
-            {
-                "date": headers.get("date", ""),
-                "from": headers.get("from", ""),
-                "subject": headers.get("subject", ""),
+            headers = {
+                h["name"].lower(): h.get("value", "")
+                for h in msg.get("payload", {}).get("headers", [])
             }
-        )
 
-    return out
+            date_raw = headers.get("date", "")
+            try:
+                date_fmt = parsedate_to_datetime(date_raw).strftime(
+                    "%Y-%m-%d %H:%M:%S %z"
+                )
+            except Exception:
+                date_fmt = date_raw
 
-def iter_message_id_pages(service: Resource, query: str, page_size: int = BATCH_SIZE):
-    """
-    Yields lists of message IDs (pages).
-    """
-    token: Optional[str] = None
-    while True:
-        resp = service.users().messages().list(
-            userId="me",
-            q=query,
-            maxResults=page_size,
-            pageToken=token,
-        ).execute()
-        msgs = resp.get("messages", [])
-        ids = [m["id"] for m in msgs]
-        if ids:
-            yield ids
-        token = resp.get("nextPageToken")
-        if not token:
+            rows.append(
+                {
+                    "date": date_fmt,
+                    "from": headers.get("from", ""),
+                    "subject": headers.get("subject", ""),
+                }
+            )
+            collected += 1
+
+        if collected >= limit:
             break
 
+    return rows

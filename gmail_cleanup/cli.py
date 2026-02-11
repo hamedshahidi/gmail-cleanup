@@ -1,23 +1,28 @@
 import click
 import typer
-from rich.console import Console
-from rich.table import Table
 from pathlib import Path
-from rich.progress import Progress
 import platform
 
-from gmail_cleanup.gmail import get_gmail_service
+from rich.console import Console
+from rich.table import Table
+from rich.progress import Progress
+
+from gmail_cleanup.gmail import (
+    get_gmail_service,
+    credentials_path,
+    token_path,
+    _app_data_dir,
+    SCOPES,
+)
 from gmail_cleanup.preview import count_messages, sample_messages
 from gmail_cleanup.query_builder import QueryOptions, build_query
 from gmail_cleanup.labels import get_or_create_label_id, apply_label_to_messages
-from gmail_cleanup.preview import iter_message_id_pages
 from gmail_cleanup.exporter import fetch_message_row, write_csv, write_json
-from gmail_cleanup.trash import iter_message_id_pages as iter_id_pages_trash, trash_message_ids
-from gmail_cleanup.gmail import credentials_path, token_path, _app_data_dir, SCOPES
-from gmail_cleanup.label_clear import iter_message_id_pages as iter_clear_pages, remove_label
+from gmail_cleanup.trash import trash_message_ids
+from gmail_cleanup.label_clear import remove_label
 from gmail_cleanup.stats import collect_sender_counts_and_dates
 from gmail_cleanup.config import load_config, config_path, write_template
-
+from gmail_cleanup.gmail_iter import iter_message_id_pages
 
 CFG = load_config()
 console = Console()
@@ -39,6 +44,10 @@ def main(
         console.print(ctx.get_help())
         raise typer.Exit()
 
+
+# ──────────────────────────────────────────────────────────────
+# QUERY
+# ──────────────────────────────────────────────────────────────
 
 @app.command()
 def query(
@@ -63,18 +72,10 @@ def query(
     """
     Dry-run: show counts and samples for a query. No deletion.
     """
-
-    # ──────────────────────────────────────────────────────────────
-    # Safety validation
-    # ──────────────────────────────────────────────────────────────
     if has_attachment and no_attachment:
         raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
 
-    # ──────────────────────────────────────────────────────────────
-    # Apply CONFIG DEFAULTS (CLI overrides config)
-    # ──────────────────────────────────────────────────────────────
     sample = sample if sample is not None else CFG.default_sample
-
     in_ = "inbox" if inbox else None
 
     opts = QueryOptions(
@@ -104,9 +105,6 @@ def query(
     console.print("\n[bold]Gmail query:[/bold]")
     console.print(built)
 
-    # ──────────────────────────────────────────────────────────────
-    # Gmail API calls
-    # ──────────────────────────────────────────────────────────────
     service = get_gmail_service()
 
     console.print("\n[bold]Counting...[/bold]")
@@ -122,9 +120,6 @@ def query(
     table.add_row("Without attachments", str(without_att))
     console.print(table)
 
-    # ──────────────────────────────────────────────────────────────
-    # Sample messages (config-controlled)
-    # ──────────────────────────────────────────────────────────────
     if sample > 0 and total > 0:
         console.print("\n[bold]Sample messages:[/bold]")
         rows = sample_messages(service, built, limit=sample)
@@ -137,6 +132,11 @@ def query(
             st.add_row(r["date"], r["from"], r["subject"])
         console.print(st)
 
+
+# ──────────────────────────────────────────────────────────────
+# LABEL
+# ──────────────────────────────────────────────────────────────
+
 @app.command()
 def label(
     q: str = typer.Option(None, help="Raw Gmail query (advanced)."),
@@ -145,7 +145,9 @@ def label(
     subject: str = typer.Option(None, help="Subject contains."),
     has_words: str = typer.Option(None, help="Has these words."),
     not_has_words: str = typer.Option(None, help="Does NOT have these words."),
-    label_filter: str = typer.Option(None, "--label", help="Filter: only messages already in this Gmail label."),
+    label_filter: str = typer.Option(
+        None, "--label", help="Filter: only messages already in this Gmail label."
+    ),
     inbox: bool = typer.Option(False, help="Shortcut for in:inbox"),
     after: str = typer.Option(None, help="After date YYYY/MM/DD"),
     before: str = typer.Option(None, help="Before date YYYY/MM/DD"),
@@ -155,7 +157,9 @@ def label(
     no_attachment: bool = typer.Option(False, help="Only emails WITHOUT attachments."),
     larger: str = typer.Option(None, help="Message larger than, e.g. 10M"),
     smaller: str = typer.Option(None, help="Message smaller than, e.g. 2M"),
-    target_label: str | None = typer.Option(None, help="Label to apply to matched messages."),
+    target_label: str | None = typer.Option(
+        None, help="Label to apply to matched messages."
+    ),
     limit: int = typer.Option(0, help="Limit how many messages to label (0 = no limit)."),
 ):
     """
@@ -165,7 +169,6 @@ def label(
         raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
 
     target_label = target_label or CFG.default_target_label
-
     in_ = "inbox" if inbox else None
 
     opts = QueryOptions(
@@ -198,36 +201,31 @@ def label(
     service = get_gmail_service()
     label_id = get_or_create_label_id(service, target_label)
 
-    # Count first (safety)
     total = count_messages(service, built)
     if total == 0:
         console.print("\nNo matching messages. Nothing to label.")
         raise typer.Exit()
 
-    console.print(f"\nFound {total} messages. This will APPLY label '{target_label}' (no deletion).")
+    console.print(
+        f"\nFound {total} messages. This will APPLY label '{target_label}' (no deletion)."
+    )
     confirm = typer.prompt("Type YES to proceed", default="NO")
     if confirm != "YES":
         console.print("Cancelled.")
         raise typer.Exit(code=1)
 
     done = 0
-    for ids in iter_message_id_pages(service, built):
-        if limit and done >= limit:
-            break
-        batch = ids
-        if limit:
-            remaining = max(0, limit - done)
-            batch = ids[:remaining]
-
-        apply_label_to_messages(service, label_id, batch)
-        done += len(batch)
+    for ids in iter_message_id_pages(service, built, limit=limit):
+        apply_label_to_messages(service, label_id, ids)
+        done += len(ids)
         console.print(f"Labeled {done}/{total if not limit else min(total, limit)}")
-
-        if limit and done >= limit:
-            break
 
     console.print("\nDone. Review the label in Gmail before deleting anything.")
 
+
+# ──────────────────────────────────────────────────────────────
+# EXPORT
+# ──────────────────────────────────────────────────────────────
 
 @app.command()
 def export(
@@ -237,7 +235,9 @@ def export(
     subject: str = typer.Option(None, help="Subject contains."),
     has_words: str = typer.Option(None, help="Has these words."),
     not_has_words: str = typer.Option(None, help="Does NOT have these words."),
-    label_filter: str = typer.Option(None, "--label", help="Filter: only messages already in this Gmail label."),
+    label_filter: str = typer.Option(
+        None, "--label", help="Filter: only messages already in this Gmail label."
+    ),
     inbox: bool = typer.Option(False, help="Shortcut for in:inbox"),
     after: str = typer.Option(None, help="After date YYYY/MM/DD"),
     before: str = typer.Option(None, help="Before date YYYY/MM/DD"),
@@ -258,7 +258,6 @@ def export(
         raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
 
     limit = limit if limit is not None else CFG.default_export_limit
-
     in_ = "inbox" if inbox else None
 
     opts = QueryOptions(
@@ -301,24 +300,17 @@ def export(
         raise typer.Exit()
 
     export_n = min(total, limit)
-    console.print(f"\nExporting {export_n} of {total} messages to: [bold]{out}[/bold] ({fmt})")
+    console.print(
+        f"\nExporting {export_n} of {total} messages to: [bold]{out}[/bold] ({fmt})"
+    )
 
     rows = []
-    exported = 0
-
     with Progress() as progress:
         task = progress.add_task("Exporting", total=export_n)
-
-        for ids in iter_message_id_pages(service, built):
+        for ids in iter_message_id_pages(service, built, limit=export_n):
             for msg_id in ids:
                 rows.append(fetch_message_row(service, msg_id))
-                exported += 1
                 progress.update(task, advance=1)
-
-                if exported >= export_n:
-                    break
-            if exported >= export_n:
-                break
 
     if fmt == "csv":
         write_csv(rows, out)
@@ -328,9 +320,15 @@ def export(
     console.print("\nDone.")
 
 
+# ──────────────────────────────────────────────────────────────
+# TRASH
+# ──────────────────────────────────────────────────────────────
+
 @app.command()
 def trash(
-    label: str = typer.Option(..., help="ONLY trash messages in this label (recommended: cleanup/candidates)."),
+    label: str = typer.Option(
+        ..., help="ONLY trash messages in this label (recommended: cleanup/candidates)."
+    ),
     sample: int = typer.Option(10, help="How many sample messages to show before trashing."),
     execute: bool = typer.Option(False, "--execute", help="Actually perform the trash action."),
     limit: int = typer.Option(0, help="Limit how many messages to trash (0 = no limit)."),
@@ -340,7 +338,9 @@ def trash(
     Move messages to Trash. Safety: requires a cleanup/* label and explicit --execute.
     """
     if not label.startswith("cleanup/"):
-        console.print("[bold red]Refusing.[/bold red] For safety, --label must start with 'cleanup/'.")
+        console.print(
+            "[bold red]Refusing.[/bold red] For safety, --label must start with 'cleanup/'."
+        )
         raise typer.Exit(code=2)
 
     built = f"label:{label}"
@@ -371,13 +371,11 @@ def trash(
 
     if target_n > CFG.max_trash_without_force and not force:
         console.print(
-            f"[bold red]Refusing.[/bold red] "
-            f"Attempting to trash {target_n} messages, "
+            f"[bold red]Refusing.[/bold red] Attempting to trash {target_n} messages, "
             f"but config max_trash_without_force is {CFG.max_trash_without_force}.\n"
             f"Use --force if you are absolutely sure."
         )
         raise typer.Exit(code=2)
-
 
     console.print("\n[bold yellow]About to move messages to Trash (recoverable).[/bold yellow]")
     console.print(f"Label: {label}")
@@ -394,25 +392,17 @@ def trash(
         raise typer.Exit(code=1)
 
     done = 0
-    for ids in iter_id_pages_trash(service, built):
-        if limit:
-            remaining = max(0, limit - done)
-            batch = ids[:remaining]
-        else:
-            batch = ids
-
-        if not batch:
-            break
-
-        trash_message_ids(service, batch)
-        done += len(batch)
+    for ids in iter_message_id_pages(service, built, limit=target_n):
+        trash_message_ids(service, ids)
+        done += len(ids)
         console.print(f"Trashed {done}/{target_n}")
-
-        if done >= target_n:
-            break
 
     console.print("\nDone. Messages moved to Trash.")
 
+
+# ──────────────────────────────────────────────────────────────
+# DOCTOR
+# ──────────────────────────────────────────────────────────────
 
 @app.command()
 def doctor():
@@ -452,6 +442,10 @@ def doctor():
     console.print("\n[dim]No changes were made.[/dim]")
 
 
+# ──────────────────────────────────────────────────────────────
+# LABEL CLEAR (command name shows as label-clear)
+# ──────────────────────────────────────────────────────────────
+
 @app.command()
 def label_clear(
     label: str = typer.Option(..., help="Label to remove (must start with cleanup/)."),
@@ -469,35 +463,25 @@ def label_clear(
 
     query = f"label:{label}"
     total = count_messages(service, query)
-
     if total == 0:
         console.print("No messages found with that label.")
         raise typer.Exit()
 
-    console.print(f"Removing label '{label}' from {total} messages.")
-
     target_n = min(total, limit) if limit else total
+    console.print(f"Removing label '{label}' from {target_n} messages.")
+
     done = 0
-
-    for ids in iter_clear_pages(service, query):
-        if limit:
-            remaining = max(0, limit - done)
-            batch = ids[:remaining]
-        else:
-            batch = ids
-
-        if not batch:
-            break
-
-        remove_label(service, label_id, batch)
-        done += len(batch)
+    for ids in iter_message_id_pages(service, query, limit=target_n):
+        remove_label(service, label_id, ids)
+        done += len(ids)
         console.print(f"Updated {done}/{target_n}")
-
-        if done >= target_n:
-            break
 
     console.print("Done.")
 
+
+# ──────────────────────────────────────────────────────────────
+# STATS
+# ──────────────────────────────────────────────────────────────
 
 @app.command()
 def stats(
@@ -517,17 +501,13 @@ def stats(
     no_attachment: bool = typer.Option(False, help="Only emails WITHOUT attachments."),
     larger: str = typer.Option(None, help="Message larger than, e.g. 10M"),
     smaller: str = typer.Option(None, help="Message smaller than, e.g. 2M"),
-    scan_limit: int | None = typer.Option(None, help="How many messages to scan"),
+    scan_limit: int | None = typer.Option(None, help="How many messages to scan (sample-based)."),
     top: int = typer.Option(10, help="How many top senders to display."),
 ):
-    """
-    Show quick stats for a query (safe). Top senders are based on scanning first N messages.
-    """
     if has_attachment and no_attachment:
         raise typer.BadParameter("Choose only one: --has-attachment or --no-attachment")
 
     scan_limit = scan_limit if scan_limit is not None else CFG.default_scan_limit
-
     in_ = "inbox" if inbox else None
 
     opts = QueryOptions(
@@ -557,14 +537,13 @@ def stats(
     console.print(built)
 
     service = get_gmail_service()
-
     total = count_messages(service, built)
     console.print(f"\nTotal matches: [bold]{total}[/bold]")
 
     if total == 0:
         raise typer.Exit()
 
-    scan_n = min(total, scan_limit) if scan_limit else total
+    scan_n = min(total, scan_limit)
     console.print(f"Scanning first {scan_n} message(s) for stats...")
 
     senders, oldest, newest = collect_sender_counts_and_dates(service, built, scan_limit=scan_n)
@@ -575,16 +554,20 @@ def stats(
     st = Table(title=f"Top senders (based on first {scan_n})")
     st.add_column("Sender")
     st.add_column("Count", justify="right")
-
     for sender, cnt in senders.most_common(top):
         st.add_row(sender, str(cnt))
-
     console.print()
     console.print(st)
 
 
+# ──────────────────────────────────────────────────────────────
+# CONFIG
+# ──────────────────────────────────────────────────────────────
+
 @app.command()
-def config(init: bool = typer.Option(False, "--init", help="Create config.yaml template (won't overwrite).")):
+def config(
+    init: bool = typer.Option(False, "--init", help="Create config.yaml template (won't overwrite).")
+):
     """
     Show config location and currently loaded config values.
     """
@@ -602,4 +585,3 @@ def config(init: bool = typer.Option(False, "--init", help="Create config.yaml t
     console.print(f"  default_export_limit: {cfg.default_export_limit}")
     console.print(f"  default_scan_limit: {cfg.default_scan_limit}")
     console.print(f"  default_sample: {cfg.default_sample}")
-
