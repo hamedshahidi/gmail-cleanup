@@ -386,13 +386,43 @@ def trash(
 
 @app.command()
 def doctor():
-    console.print(f"OS: {platform.system()} {platform.release()}")
-    console.print(f"App data dir:\n  {_app_data_dir()}")
-    console.print(f"credentials.json: {credentials_path()}")
-    console.print(f"token.json: {token_path()}")
-    console.print("Scopes:")
-    for s in SCOPES:
-        console.print(f"  - {s}")
+    os_name = f"{platform.system()} {platform.release()}"
+    app_dir = _app_data_dir()
+    creds = credentials_path()
+    token = token_path()
+
+    checks: list[tuple[str, bool, str]] = [
+        ("OS detected", True, os_name),
+        ("App data directory", app_dir.exists(), str(app_dir)),
+        ("credentials.json", creds.exists(), str(creds)),
+        ("token.json", token.exists(), str(token)),
+        ("OAuth scopes", len(SCOPES) > 0, ", ".join(SCOPES)),
+    ]
+
+    table = Table(title="Doctor checks")
+    table.add_column("Check")
+    table.add_column("Status")
+    table.add_column("Details")
+
+    ok_count = 0
+    for label, is_ok, details in checks:
+        if is_ok:
+            status = "[green]OK[/green]"
+            ok_count += 1
+        else:
+            status = "[red]MISSING[/red]"
+        table.add_row(label, status, details)
+
+    issue_count = len(checks) - ok_count
+    console.print(table)
+    if issue_count == 0:
+        console.print(f"\nSummary: [green]{ok_count} OK[/green], [green]0 issues[/green]")
+    else:
+        console.print(
+            f"\nSummary: [green]{ok_count} OK[/green], [yellow]{issue_count} issue(s)[/yellow]"
+        )
+        if not token.exists():
+            console.print("Action: authenticate once to create token.json.")
 
 
 # ──────────────────────────────────────────────────────────────
