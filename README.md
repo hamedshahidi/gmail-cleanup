@@ -63,6 +63,44 @@ pip install -e .
 
 ---
 
+## Database (Local Development)
+
+- Default DB path: `apps/api/local.db`.
+- `DATABASE_URL` defaults to `sqlite:///apps/api/local.db` via `apps/api/app/settings.py`:
+  - `repo_root = Path(__file__).resolve().parents[3]`
+  - `db_path = repo_root / "apps" / "api" / "local.db"`
+  - `default_database_url = f"sqlite:///{db_path.as_posix()}"`
+- Print the effective DB URL:
+  ```bash
+  PYTHONPATH=apps/api python -c "from app.settings import get_settings; print(get_settings().database_url)"
+  ```
+- Reset local DB:
+  1. Stop the API server.
+  2. Delete `apps/api/local.db`.
+  3. Restart the API server.
+- Run migrations:
+  ```bash
+  cd apps/api
+  alembic upgrade head
+  ```
+- Note: SQLite foreign key enforcement is enabled via a SQLAlchemy event hook.
+
+## Local Development (API + Web)
+
+1. Start API from repo root:
+   ```bash
+   uvicorn apps.api.app.main:app --reload --port 8000
+   ```
+2. In a second terminal:
+   ```bash
+   cd apps/web
+   npm install
+   npm run dev
+   ```
+3. Open `http://localhost:3000/accounts`.
+
+---
+
 ## Google OAuth setup (one time)
 
 ### 1. Create Google Cloud project
