@@ -18,7 +18,13 @@ from .settings import get_settings
 
 settings = get_settings()
 app = FastAPI(title="gmail-cleanup API")
-app.add_middleware(SessionMiddleware, secret_key=settings.app_session_secret)
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.app_session_secret,
+    https_only=settings.app_env == "production",
+    same_site="lax",
+    max_age=7 * 24 * 60 * 60,
+)
 
 
 @app.get("/health")

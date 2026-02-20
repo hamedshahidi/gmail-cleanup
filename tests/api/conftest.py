@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import os
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+os.environ.setdefault("APP_ENV", "development")
+os.environ.setdefault("APP_SESSION_SECRET", "test-session-secret")
 
 import app.main as main_module
 from app.db import Base
