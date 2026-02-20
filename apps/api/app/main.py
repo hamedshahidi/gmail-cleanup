@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -97,29 +97,19 @@ def oauth_google_callback(
             email=email,
             token_encrypted=encrypted,
             scopes=scopes,
-            last_used_at=datetime.utcnow(),
+            last_used_at=datetime.now(UTC),
         )
         db.add(account)
     else:
         account.email = email
         account.token_encrypted = encrypted
         account.scopes = scopes
-        account.last_used_at = datetime.utcnow()
+        account.last_used_at = datetime.now(UTC)
 
     db.commit()
     db.refresh(account)
 
-    return JSONResponse(
-        {
-            "connected": True,
-            "account": {
-                "id": account.id,
-                "google_sub": account.google_sub,
-                "email": account.email,
-                "scopes": account.scopes,
-            },
-        }
-    )
+    return RedirectResponse(url="http://localhost:3000/accounts", status_code=302)
 
 
 @app.get("/accounts")
@@ -144,3 +134,30 @@ def list_accounts(request: Request, db: Session = Depends(get_db)) -> dict[str, 
             for a in accounts
         ]
     }
+
+
+@app.post("/logout")
+def logout(request: Request) -> JSONResponse:
+    request.session.clear()
+    resp = JSONResponse({"logged_out": True})
+    resp.delete_cookie("session")
+    return resp
+
+
+@app.delete("/accounts/{account_id}")
+def delete_account(account_id: int, request: Request, db: Session = Depends(get_db)) -> dict[str, bool]:
+    current_user = get_or_create_current_user(request, db)
+
+    account = db.execute(
+        select(GoogleAccount).where(
+            GoogleAccount.id == account_id,
+            GoogleAccount.user_id == current_user.id,
+        )
+    ).scalar_one_or_none()
+
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    db.delete(account)
+    db.commit()
+    return {"deleted": True}

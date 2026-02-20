@@ -7,15 +7,18 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+repo_root = Path(__file__).resolve().parents[3]
+db_path = repo_root / "apps" / "api" / "local.db"
+default_database_url = f"sqlite:///{db_path.as_posix()}"
+
 
 def _load_env() -> None:
-    repo_root = Path(__file__).resolve().parents[3]
     load_dotenv(repo_root / ".env")
 
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str = "sqlite:///./apps/api/local.db"
+    database_url: str = default_database_url
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_url: str = "http://localhost:8000/oauth/google/callback"
@@ -27,7 +30,7 @@ class Settings:
 def get_settings() -> Settings:
     _load_env()
     return Settings(
-        database_url=os.getenv("DATABASE_URL", "sqlite:///./apps/api/local.db"),
+        database_url=os.getenv("DATABASE_URL", default_database_url),
         google_client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
         google_client_secret=os.getenv("GOOGLE_CLIENT_SECRET", ""),
         google_redirect_url=os.getenv("GOOGLE_REDIRECT_URL", "http://localhost:8000/oauth/google/callback"),

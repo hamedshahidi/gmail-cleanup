@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from apps.api.app.db import Base
-from apps.api.app.models import GoogleAccount, User  # noqa: F401
-from apps.api.app.settings import get_settings
+API_ROOT = Path(__file__).resolve().parents[1]  # apps/api
+if str(API_ROOT) not in sys.path:
+    sys.path.insert(0, str(API_ROOT))
+
+from app.db import Base
+from app.models import GoogleAccount, User  # noqa: F401
+from app.settings import get_settings
 
 
 config = context.config
@@ -15,8 +21,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", get_settings().database_url)
 target_metadata = Base.metadata
 
 
