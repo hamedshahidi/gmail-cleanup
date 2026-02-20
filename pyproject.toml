@@ -22,6 +22,12 @@ dependencies = [
 [project.scripts]
 gmail-cleanup = "gmail_cleanup.cli:app"
 
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "httpx>=0.27",
+]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
