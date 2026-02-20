@@ -32,6 +32,7 @@ token.json
 .env.*
 config.local.*
 *.log
+!.env.example
 
 # Local databases
 *.db
