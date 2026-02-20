@@ -46,6 +46,7 @@ def oauth_google_callback(
     request: Request,
     code: str = Query(...),
     state: str | None = Query(default=None),
+    scope: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
     expected_state = request.session.get("oauth_state")
@@ -75,7 +76,7 @@ def oauth_google_callback(
         raise HTTPException(status_code=400, detail="Google userinfo missing sub/email.")
 
     current_user = get_or_create_current_user(request, db)
-    scopes = " ".join(creds.scopes or [])
+    scopes = " ".join(creds.scopes or []) or (scope or "")
 
     try:
         encrypted = encrypt_refresh_token(settings.token_enc_key, refresh_token)
