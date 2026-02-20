@@ -53,6 +53,11 @@ def oauth_google_callback(
         raise HTTPException(status_code=400, detail="OAuth state mismatch.")
 
     flow = build_google_flow(settings, state=state)
+
+    # oauthlib can raise on "scope changed" even when Google returns equivalent scopes.
+    # Accept the granted scopes returned by Google.
+    flow.oauth2session.scope = None
+
     flow.fetch_token(code=code)
     creds = flow.credentials
 
