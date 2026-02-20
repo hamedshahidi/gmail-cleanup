@@ -49,9 +49,9 @@ def oauth_google_callback(
     scope: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    expected_state = request.session.get("oauth_state")
-    if expected_state and state != expected_state:
-        raise HTTPException(status_code=400, detail="OAuth state mismatch.")
+    expected_state = request.session.pop("oauth_state", None)
+    if not expected_state or not state or state != expected_state:
+        raise HTTPException(status_code=400, detail="OAuth state missing or mismatch.")
 
     flow = build_google_flow(settings, state=state)
 
