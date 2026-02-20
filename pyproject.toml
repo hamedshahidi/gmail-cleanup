@@ -17,6 +17,7 @@ dependencies = [
   "alembic>=1.13",
   "cryptography>=42.0",
   "python-dotenv>=1.0",
+  "itsdangerous>=2.2",
 ]
 
 [project.scripts]
