@@ -32,3 +32,8 @@ token.json
 .env.*
 config.local.*
 *.log
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
