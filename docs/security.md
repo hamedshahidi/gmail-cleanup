@@ -32,6 +32,18 @@ The root `.gitignore` blocks common local secret and database files, including:
 - `*.env`, `.env`, `.env.*`
 - `*.db`, `*.sqlite`, `*.sqlite3`
 
+## API session and OAuth hardening
+
+- FastAPI uses `SessionMiddleware` with:
+  - `same_site=lax`
+  - `max_age=7 days`
+  - `https_only=True` when `APP_ENV=production`
+- `APP_ENV` defaults to `development`.
+- Outside development, `APP_SESSION_SECRET` must be set and cannot be a placeholder value.
+- OAuth callback requires query `state` and session `oauth_state` to both exist and match.
+- OAuth callback consumes `oauth_state` once to block replay.
+- Google refresh tokens are encrypted at rest using `TOKEN_ENC_KEY`.
+
 ## If a secret was committed
 
 1. Revoke or rotate the leaked credential immediately in the provider console.
@@ -39,4 +51,3 @@ The root `.gitignore` blocks common local secret and database files, including:
    - `git rm --cached <path-to-secret>`
    - `git commit -m "stop tracking secret file"`
 3. If already pushed, rewrite history with a safe tool such as `git filter-repo` or BFG, then force-push and notify collaborators.
-

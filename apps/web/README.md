@@ -25,3 +25,17 @@ Next.js App Router frontend for Gmail account connection and listing.
 
 - Browser requests go to Next.js `/api/*` routes, which proxy to FastAPI.
 - OAuth redirect and cookies are preserved through the proxy.
+- Proxy routes also forward upstream status/body and `Set-Cookie` headers.
+
+## Testing
+
+Use build as a quick verification step:
+```bash
+npm run build
+```
+
+## Production behavior notes
+
+- Keep browser traffic to Next.js routes only (`/api/*`).
+- Set `FASTAPI_BASE_URL` to your deployed FastAPI origin.
+- FastAPI session hardening is environment-driven (`APP_ENV`, `APP_SESSION_SECRET`).

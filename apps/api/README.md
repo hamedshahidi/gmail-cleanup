@@ -22,6 +22,17 @@ FastAPI service for OAuth account linking/session management used by `apps/web`.
    pip install -e .[dev]
    ```
 
+## Environment Variables
+- `DATABASE_URL` (optional, default: `sqlite:///apps/api/local.db`)
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URL` (default: `http://localhost:8000/oauth/google/callback`)
+- `TOKEN_ENC_KEY` (Fernet key for refresh token encryption)
+- `APP_ENV` (`development` default)
+- `APP_SESSION_SECRET`:
+  - development: default placeholder is allowed
+  - non-development: must be explicitly set to a non-placeholder value
+
 ## Database (Local Development)
 - Default DB path: `apps/api/local.db`.
 - `DATABASE_URL` defaults to `sqlite:///apps/api/local.db` via `app/settings.py`:
@@ -41,7 +52,7 @@ FastAPI service for OAuth account linking/session management used by `apps/web`.
   cd apps/api
   alembic upgrade head
   ```
-- Note: SQLite foreign key enforcement is enabled via a SQLAlchemy event hook.
+- Note: `apps/api/local.db` is local development storage only and should not be committed.
 
 ## Run
 ```bash
@@ -52,6 +63,16 @@ uvicorn apps.api.app.main:app --reload --port 8000
 - Google OAuth redirect URI must include: `http://localhost:8000/oauth/google/callback`.
 - If your Google OAuth app is in testing mode, add your Gmail account under OAuth test users in Google Cloud Console.
 - The frontend (`apps/web`) should call only Next.js `/api/*` routes, which proxy to this API.
+- Callback state handling is strict:
+  - both query `state` and session `oauth_state` must exist and match
+  - `oauth_state` is consumed once (replay fails)
+
+## Session and Token Security Notes
+- FastAPI uses `SessionMiddleware` with:
+  - `same_site=lax`
+  - `max_age=7 days`
+  - `https_only=True` when `APP_ENV=production`
+- Google refresh tokens are encrypted before persistence using `TOKEN_ENC_KEY`.
 
 ## Tests
 ```bash

@@ -63,6 +63,28 @@ pip install -e .
 
 ---
 
+## Monorepo Architecture
+
+`Next.js (apps/web) -> FastAPI (apps/api) -> Gmail APIs`
+
+- Browser talks only to Next.js `/api/*`.
+- Next.js route handlers proxy to FastAPI and forward cookies / `Set-Cookie`.
+- FastAPI uses `SessionMiddleware` for session state and stores encrypted Google refresh tokens.
+
+## Environment Variables
+
+Backend (`.env` at repo root):
+- `DATABASE_URL` (optional, default: `sqlite:///apps/api/local.db`)
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `GOOGLE_REDIRECT_URL` (default: `http://localhost:8000/oauth/google/callback`)
+- `TOKEN_ENC_KEY` (Fernet key used for refresh token encryption)
+- `APP_ENV` (`development` by default)
+- `APP_SESSION_SECRET` (required and must be non-placeholder when `APP_ENV != development`)
+
+Frontend (`apps/web/.env.local`):
+- `FASTAPI_BASE_URL` (optional, default: `http://127.0.0.1:8000`)
+
 ## Database (Local Development)
 
 - Default DB path: `apps/api/local.db`.
@@ -83,7 +105,7 @@ pip install -e .
   cd apps/api
   alembic upgrade head
   ```
-- Note: SQLite foreign key enforcement is enabled via a SQLAlchemy event hook.
+- Note: `apps/api/local.db` is local development storage only and should not be committed.
 
 ## Local Development (API + Web)
 
@@ -98,6 +120,29 @@ pip install -e .
    npm run dev
    ```
 3. Open `http://localhost:3000/accounts`.
+
+---
+
+## Testing
+
+- Backend tests:
+  ```bash
+  pytest -q
+  ```
+- Frontend build verification:
+  ```bash
+  cd apps/web
+  npm run build
+  ```
+
+## Production Behavior Notes
+
+- Session hardening:
+  - `APP_ENV=production` enables secure session cookies (`https_only=True`) in FastAPI.
+  - `APP_SESSION_SECRET` must be explicitly set to a non-placeholder value outside development.
+  - Session cookies use `same_site=lax` and a max age of 7 days.
+- OAuth callback enforces strict `state` validation and one-time `oauth_state` consumption.
+- Refresh tokens are stored encrypted at rest in the API database.
 
 ---
 
