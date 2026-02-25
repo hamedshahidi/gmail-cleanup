@@ -2,7 +2,11 @@
 
 This document tracks the incremental migration of the CLI-based Gmail cleanup tool into a cloud-ready web application.
 
-It is updated continuously as milestones are completed or architectural decisions evolve.
+It must be updated whenever:
+- A task is completed
+- A task number changes
+- Scope evolves
+- Architecture decisions change
 
 ---
 
@@ -23,7 +27,7 @@ Next.js UI → FastAPI API → shared core → Gmail API
 
 # Phase 1 — OAuth & Account Management (Completed)
 
-### Task004 — FastAPI OAuth + Accounts
+## Task004 — FastAPI OAuth + Accounts
 - Google OAuth start & callback
 - Encrypted refresh token storage
 - Session-based identity
@@ -31,13 +35,13 @@ Next.js UI → FastAPI API → shared core → Gmail API
 - `DELETE /accounts/{id}`
 - `/logout`
 
-### Task005 — API Tests
+## Task005 — API Tests
 - Health endpoint tests
-- OAuth start/callback validation tests
+- OAuth validation tests
 - Account endpoint tests
 - Encryption tests
 
-### Task006 — Next.js Accounts UI
+## Task006 — Next.js Accounts UI
 - `/accounts` page
 - Proxy `/api/*` routes
 - Cookie + redirect forwarding
@@ -47,53 +51,59 @@ Next.js UI → FastAPI API → shared core → Gmail API
 
 # Phase 2 — Security Hardening (Completed)
 
-### Stage 1 — Session Identity Isolation
+### Session Identity Isolation
 - Removed first-user fallback
 - Missing/invalid session creates new local user
-- Prevents cross-user data exposure
+- Prevented cross-user data exposure
 
-### Stage 2 — Strict OAuth State Enforcement
-- Requires session + query state
+### Strict OAuth State Enforcement
+- Required session + query state
 - Exact match validation
 - One-time state consumption (replay protection)
-- Added tests for missing/mismatch/replay
 
-### Stage 3 — Production Session Hardening
+### Production Session Hardening
 - Introduced `APP_ENV`
 - Enforced explicit `APP_SESSION_SECRET` in production
 - Rejected placeholder secrets
 - Secure cookie flags in production
-- Added validation tests
 
 ---
 
-# Phase 3 — Documentation & Repo Hygiene (Completed)
+# Phase 3 — Documentation & Repo Hygiene (In Progress)
 
-- Normalized README files
-- Documented DB location and reset steps
-- Documented environment variables
-- Documented dev vs production behavior
-- Public-repo safety confirmed
+## Task007 — README Normalization & Documentation Alignment
+- Normalize root README
+- Normalize apps/api README
+- Normalize apps/web README
+- Document:
+  - Environment variables
+  - DB location & reset
+  - Alembic migrations
+  - Dev vs production behavior
+  - OAuth setup notes
+- Ensure documentation matches security hardening
+
+Status: 🔄 In Progress
 
 ---
 
 # Phase 4 — Gmail Message Listing (Read-Only)
 
-## Task007 — Backend Contract (Stage A)
+## Task008 — Backend Contract (Stage A)
 - Add `GET /accounts/{id}/messages`
 - Enforce account ownership
 - Introduce service abstraction
 - Return normalized message DTO
 - Add unit tests (no Google calls)
 
-## Task008 — Gmail Adapter (Stage B)
+## Task009 — Gmail Adapter (Stage B)
 - Decrypt refresh token
 - Refresh access token
 - Call Gmail API
 - Normalize headers (Subject, From, Date)
 - Mock in tests
 
-## Task009 — UI Integration (Stage C)
+## Task010 — UI Integration (Stage C)
 - Add "View Messages" button
 - Next.js proxy route
 - Render message list
@@ -116,8 +126,8 @@ Next.js UI → FastAPI API → shared core → Gmail API
 ## Deployment Readiness
 - Cloud configuration guide
 - HTTPS cookie verification
-- CI enforcement (no secrets, tests must pass)
-- Alembic migration workflow
+- CI enforcement
+- Migration workflow hardening
 
 ---
 
@@ -128,4 +138,4 @@ Next.js UI → FastAPI API → shared core → Gmail API
 - CLI must remain fully functional.
 - Minimal, incremental, additive changes only.
 - No secrets committed.
-- Update this document after every completed milestone.
+- This file must be updated when any task is completed.
