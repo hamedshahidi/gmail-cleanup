@@ -1,0 +1,197 @@
+version: "3"
+
+vars:
+  REPO_ROOT:
+    sh: pwd
+
+  VENV_DIR: .venv
+  VENV_PY_WIN: '{{.REPO_ROOT}}/.venv/Scripts/python'
+  VENV_PY_NIX: '{{.REPO_ROOT}}/.venv/bin/python'
+  VENV_PY:
+    sh: |
+      if [ "{{OS}}" = "windows" ]; then echo "{{.VENV_PY_WIN}}"; else echo "{{.VENV_PY_NIX}}"; fi
+
+tasks:
+  # ----------------------------
+  # One-command bootstrap + run
+  # ----------------------------
+  up:
+    desc: One-command bootstrap + run (API + Web)
+    deps: [setup, up:run]
+
+  up:run:
+    desc: Run API + Web concurrently
+    deps: [run:api, run:web]
+    parallel: true
+
+  # ----------------------------
+  # Setup
+  # ----------------------------
+  setup:
+    desc: Bootstrap everything (venv, python deps, web deps, playwright)
+    deps:
+      - setup:venv
+      - setup:api
+      - setup:db
+      - setup:web
+      - setup:pw
+
+  setup:venv:
+    desc: Create repo-root Python venv at .venv if missing
+    run: once
+    cmds:
+      - |
+        bash -lc '
+          set -e
+          if [ -d "{{.VENV_DIR}}" ]; then
+            echo "✔ venv exists: {{.VENV_DIR}}"
+            exit 0
+          fi
+          echo "➜ Creating venv: {{.VENV_DIR}}"
+          python -m venv "{{.VENV_DIR}}"
+          echo "➜ Upgrading pip"
+          "{{.VENV_PY}}" -m pip install --upgrade pip
+        '
+    status:
+      - test -d "{{.VENV_DIR}}"
+
+  setup:db:
+    desc: Apply API database migrations (SQLite) using Alembic
+    run: once
+    deps: [setup:api]
+    cmds:
+      - |
+        bash -lc '
+          set -e
+          echo "➜ Applying DB migrations (alembic upgrade head)"
+          "{{.VENV_PY}}" -m alembic -c apps/api/alembic.ini upgrade head
+        '
+
+  setup:api:
+    desc: Install Python dependencies from root pyproject.toml using .venv python
+    run: once
+    deps: [setup:venv]
+    cmds:
+      - |
+        bash -lc '
+          set -e
+          echo "➜ Installing python deps from repo root (pyproject.toml)"
+          "{{.VENV_PY}}" -m pip install --upgrade pip
+          "{{.VENV_PY}}" -m pip install -e ".[dev]" || "{{.VENV_PY}}" -m pip install -e .
+        '
+
+  setup:web:
+    desc: Install frontend dependencies (apps/web)
+    run: once
+    cmds:
+      - |
+        bash -lc '
+          set -e
+          cd apps/web
+          echo "➜ Installing web deps (apps/web)"
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+        '
+
+  setup:pw:
+    desc: Install Playwright browsers (apps/web)
+    run: once
+    deps: [setup:web]
+    cmds:
+      - |
+        bash -lc '
+          set -e
+          cd apps/web
+          echo "➜ Installing Playwright browsers"
+          npx playwright install
+        '
+    status:
+    - test -d apps/web/node_modules/.cache/ms-playwright
+
+  # ----------------------------
+  # Run (dev servers)
+  # ----------------------------
+  run:api:
+    desc: Run FastAPI dev server via .venv python (no global uvicorn)
+    deps: [setup:api]
+    cmds:
+      - |
+        bash -lc '
+          set -e
+          echo "➜ Starting FastAPI: http://127.0.0.1:8000"
+          cd apps/api
+          PYTHONPATH=apps/api "{{.VENV_PY}}" -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+        '
+
+  run:web:
+    desc: Run Next.js dev server
+    deps: [setup:web]
+    dir: apps/web
+    cmds:
+      - npm run dev
+
+  # ----------------------------
+  # Dev aliases
+  # ----------------------------
+  dev:
+    desc: Alias for task up
+    cmds:
+      - task up
+
+  dev:api:
+    desc: Alias for task run:api
+    cmds:
+      - task run:api
+
+  dev:web:
+    desc: Alias for task run:web
+    cmds:
+      - task run:web
+
+  # ----------------------------
+  # Build
+  # ----------------------------
+  build:
+    desc: Build web (Next.js)
+    deps: [build:web]
+
+  build:web:
+    desc: Build Next.js app
+    dir: apps/web
+    cmds:
+      - npm run build
+
+  # ----------------------------
+  # Test
+  # ----------------------------
+  test:
+    desc: Run backend tests + web build + web e2e tests
+    cmds:
+      - task test:api
+      - task test:web:build
+      - task test:web:e2e
+
+  test:api:
+    desc: Run Python tests (no Google endpoints)
+    deps: [setup:api]
+    cmds:
+      - |
+        bash -lc '
+          set -e
+          "{{.VENV_PY}}" -m pytest -q
+        '
+
+  test:web:build:
+    desc: Build Next.js app
+    dir: apps/web
+    cmds:
+      - npm run build
+
+  test:web:e2e:
+    desc: Run Playwright E2E tests (mocked /api/*)
+    dir: apps/web
+    cmds:
+      - npm run test:e2e

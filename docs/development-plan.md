@@ -120,17 +120,57 @@ Next.js UI → FastAPI API → shared core → Gmail API
 
 ---
 
-# Phase 5 — Quality & Confidence
+# Phase 5 — Quality & Confidence (Completed)
 
-## Task012 — Playwright E2E (Mode A) (Completed)
-- Added Playwright setup in `apps/web`
-- Added E2E tests with `/api/*` request mocking only
-- Covered `/accounts` rendering
-- Covered account details navigation
-- Covered messages rendering
-- Covered messages 404/400 error states
-- Covered loading state with delayed mocked response
-- No FastAPI or Google calls in E2E tests
+## Task012 — Playwright E2E (Mode A)
+- Configured Playwright in `apps/web`
+- E2E tests mock `/api/*` requests only
+- No real FastAPI or Google calls in E2E
+- Covered:
+  - `/accounts` rendering
+  - Account details navigation
+  - Messages rendering
+  - Messages 404/400 error states
+  - Loading state with delayed mocked response
+- Verified locally via `npm run test:e2e`
+- Included in unified `task test` workflow
+
+## Task013 — Monorepo Task Runner (Production-Grade)
+- Introduced structured root `Taskfile.yml`
+
+### Bootstrap Workflow
+- `task setup`
+  - Create `.venv`
+  - Install Python dependencies (editable mode)
+  - Apply Alembic migrations
+  - Install web dependencies
+  - Install Playwright browsers
+- Setup tasks use `run: once` for idempotent bootstrap
+
+### Development Workflow
+- `task run:api`
+- `task run:web`
+- `task up`
+  - Bootstrap + run API & Web concurrently
+  - Uses `deps` + `parallel: true` for reliable concurrency
+
+### Build Workflow
+- `task build:web`
+
+### Test Workflow
+- `task test`
+  - Backend pytest
+  - Web build
+  - Web Playwright E2E
+- `task test:api`
+- `task test:web`
+- `task test:web:e2e`
+
+### Verified Locally
+- `task up`
+- `task build:web`
+- `task test`
+- End-to-end validation via browser + curl
 
 ---
 
