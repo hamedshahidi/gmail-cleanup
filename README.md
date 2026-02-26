@@ -1,219 +1,276 @@
 # gmail-cleanup
 
-A **safe, local-first Gmail cleanup CLI** for power users who want to clean their inbox **without accidents**.
+A **safe, local-first Gmail cleanup system** designed for power users who want to clean their inbox **without accidents**.
 
-This tool is designed around a simple idea:
+This project contains:
+
+* ✅ Safe Gmail CLI (`gmail-cleanup`)
+* ✅ FastAPI backend (`apps/api`)
+* ✅ Next.js frontend (`apps/web`)
+* ✅ Shared cleanup core
+* ✅ Deterministic task runner (`task`)
+
+Core philosophy:
 
 > **You should never delete emails you haven’t reviewed.**
 
-So the default workflow is:
+Default workflow:
 
 ```
 query → label → export → trash
 ```
 
-No cloud service.
-No data stored outside your machine.
+No background service.
+No cloud storage of emails.
 No deletion without explicit confirmation.
 
 ---
 
-## What this tool is
+# Project Structure
 
-* A **local CLI** that talks directly to the Gmail API
-* Runs entirely on **your computer**
-* Uses **Google OAuth** (same as Gmail apps)
-* Designed to be **safe by default**
-* Open-source, transparent, auditable
+```
+apps/
+  api/        → FastAPI backend
+  web/        → Next.js frontend
+gmail_cleanup/ → Original CLI (must remain functional)
+packages/
+codex/tasks/
+docs/
+pyproject.toml
+Taskfile.yml
+```
 
-## What this tool is NOT
+Architecture:
 
-* ❌ Not a web app
-* ❌ Not a background service
-* ❌ Not a “one-click delete everything” script
-* ❌ Does not store or send your emails anywhere except Google
+```
+Browser
+  → Next.js (/api/*)
+    → FastAPI
+      → Shared Core
+        → Gmail API
+```
+
+Browser **never talks directly to FastAPI**.
 
 ---
 
-## Requirements
+# Requirements
 
-* Python **3.10+**
-* A Google account (Gmail)
-* A Google Cloud project with Gmail API enabled
+* Python 3.10+
+* Node 18+
+* npm
+* A Google account
+* Google Cloud project with Gmail API enabled
 
 ---
 
-## Installation
+# 🚀 First-Time Setup (One Command)
 
-### Recommended (isolated install)
+From repo root:
+
+```bash
+task up
+```
+
+That’s it.
+
+This will:
+
+* Create `.venv` (if missing)
+* Install Python dependencies from `pyproject.toml`
+* Install frontend dependencies
+* Install Playwright browsers
+* Start:
+
+  * API → [http://127.0.0.1:8000](http://127.0.0.1:8000)
+  * Web → [http://localhost:3000](http://localhost:3000)
+
+No manual virtualenv activation required.
+No global `uvicorn` required.
+
+---
+
+# Development Commands
+
+## Start everything
+
+```bash
+task up
+```
+
+## Run tests
+
+```bash
+task test
+```
+
+Runs:
+
+* Backend tests (no Google endpoints)
+* Web build
+* Playwright E2E tests (mocked `/api/*`)
+
+## Build frontend
+
+```bash
+task build:web
+```
+
+---
+
+# CLI Usage (Still Fully Supported)
+
+The original CLI remains fully functional.
+
+## Install via pipx (recommended)
 
 ```bash
 pipx install gmail-cleanup
 ```
 
-### Development / local clone
+## Development usage (inside repo)
 
 ```bash
-git clone https://github.com/hamedshahidi/gmail-cleanup.git
-cd gmail-cleanup
-python -m venv .venv
-source .venv/Scripts/activate   # Windows Git Bash
-pip install -e .
+.venv/Scripts/python -m gmail_cleanup --help
+```
+
+or after activation:
+
+```bash
+gmail-cleanup --help
 ```
 
 ---
 
-## Monorepo Architecture
+# Environment Variables
 
-`Next.js (apps/web) -> FastAPI (apps/api) -> Gmail APIs`
+## Backend (repo root environment)
 
-- Browser talks only to Next.js `/api/*`.
-- Next.js route handlers proxy to FastAPI and forward cookies / `Set-Cookie`.
-- FastAPI uses `SessionMiddleware` for session state and stores encrypted Google refresh tokens.
+Required for OAuth:
 
-## Environment Variables
+* `GOOGLE_CLIENT_ID`
+* `GOOGLE_CLIENT_SECRET`
+* `TOKEN_ENC_KEY`
 
-Backend (`.env` at repo root):
-- `DATABASE_URL` (optional, default: `sqlite:///apps/api/local.db`)
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
-- `GOOGLE_REDIRECT_URL` (default: `http://localhost:8000/oauth/google/callback`)
-- `TOKEN_ENC_KEY` (Fernet key used for refresh token encryption)
-- `APP_ENV` (`development` by default)
-- `APP_SESSION_SECRET` (required and must be non-placeholder when `APP_ENV != development`)
+Optional:
 
-Frontend (`apps/web/.env.local`):
-- `FASTAPI_BASE_URL` (optional, default: `http://127.0.0.1:8000`)
+* `DATABASE_URL`
+* `GOOGLE_REDIRECT_URL`
+* `APP_ENV`
+* `APP_SESSION_SECRET`
 
-## Database (Local Development)
+Defaults:
 
-- Default DB path: `apps/api/local.db`.
-- `DATABASE_URL` defaults to `sqlite:///apps/api/local.db` via `apps/api/app/settings.py`:
-  - `repo_root = Path(__file__).resolve().parents[3]`
-  - `db_path = repo_root / "apps" / "api" / "local.db"`
-  - `default_database_url = f"sqlite:///{db_path.as_posix()}"`
-- Print the effective DB URL:
-  ```bash
-  PYTHONPATH=apps/api python -c "from app.settings import get_settings; print(get_settings().database_url)"
-  ```
-- Reset local DB:
-  1. Stop the API server.
-  2. Delete `apps/api/local.db`.
-  3. Restart the API server.
-- Run migrations:
-  ```bash
-  cd apps/api
-  alembic upgrade head
-  ```
-- Note: `apps/api/local.db` is local development storage only and should not be committed.
+* SQLite database stored at:
 
-## Local Development (API + Web)
+```
+apps/api/local.db
+```
 
-1. Start API from repo root:
-   ```bash
-   uvicorn apps.api.app.main:app --reload --port 8000
-   ```
-2. In a second terminal:
-   ```bash
-   cd apps/web
-   npm install
-   npm run dev
-   ```
-3. Open `http://localhost:3000/accounts`.
+⚠️ Never commit:
+
+* `.env`
+* `local.db`
+* `credentials.json`
+* `token.json`
 
 ---
 
-## Testing
+## Frontend (`apps/web/.env.local`)
 
-- Backend tests:
-  ```bash
-  pytest -q
-  ```
-- Frontend build verification:
-  ```bash
-  cd apps/web
-  npm run build
-  ```
+Optional:
 
-## Production Behavior Notes
+* `FASTAPI_BASE_URL`
 
-- Session hardening:
-  - `APP_ENV=production` enables secure session cookies (`https_only=True`) in FastAPI.
-  - `APP_SESSION_SECRET` must be explicitly set to a non-placeholder value outside development.
-  - Session cookies use `same_site=lax` and a max age of 7 days.
-- OAuth callback enforces strict `state` validation and one-time `oauth_state` consumption.
-- Refresh tokens are stored encrypted at rest in the API database.
+  * Default: `http://127.0.0.1:8000`
 
 ---
 
-## Google OAuth setup (one time)
+# Database (Local Development)
 
-### 1. Create Google Cloud project
+Default:
 
-* Go to Google Cloud Console
-* Create a new project (any name)
+```
+apps/api/local.db
+```
+
+To reset:
+
+1. Stop API
+2. Delete `apps/api/local.db`
+3. Restart `task up`
+
+Run migrations manually:
+
+```bash
+cd apps/api
+alembic upgrade head
+```
+
+---
+
+# Google OAuth Setup (One-Time)
+
+### 1. Create Google Cloud Project
+
+* Google Cloud Console → New Project
 
 ### 2. Enable Gmail API
 
-* APIs & Services → Library
-* Search **Gmail API**
-* Enable
+* APIs & Services → Library → Enable Gmail API
 
-### 3. Create OAuth client
+### 3. Create OAuth Client
 
 * APIs & Services → Credentials
-* Create Credentials → OAuth Client ID
-* Application type: **Desktop app**
+* OAuth Client ID
+* Type: Desktop App
 * Download `credentials.json`
 
-### 4. Put `credentials.json` in the app data folder
+### 4. Place credentials file
 
-On **Windows**:
+Windows:
 
 ```
 C:\Users\<YOU>\AppData\Roaming\gmail-cleanup\credentials.json
 ```
 
-(macOS / Linux use `~/.config/gmail-cleanup/`)
+macOS/Linux:
 
-The file is **never committed** to this repo.
+```
+~/.config/gmail-cleanup/credentials.json
+```
+
+Never commit this file.
 
 ---
 
-## Verify setup
+# Verify CLI Setup
 
 ```bash
 gmail-cleanup doctor
 ```
 
-This will:
+This:
 
-* Show expected paths
-* Check if credentials/token exist
-* Explain how to fix missing pieces
-* Make **no API calls**
+* Shows expected paths
+* Checks for credentials
+* Makes no API calls
 
 ---
 
-## Core workflow (recommended)
+# Core Workflow (Safe Cleanup)
 
-### 1. Preview with `query` (dry-run)
+## 1. Preview (Dry-Run)
 
 ```bash
 gmail-cleanup query --from team@news.bookbeat.com --older-than 30d --sample 5
 ```
 
-Shows:
-
-* total count
-* with / without attachments
-* sample subjects + dates
-
-No changes are made.
+Shows counts and sample messages.
 
 ---
 
-### 2. Stage candidates with `label`
+## 2. Stage with Label
 
 ```bash
 gmail-cleanup label \
@@ -222,34 +279,21 @@ gmail-cleanup label \
   --target-label cleanup/candidates
 ```
 
-* Applies a Gmail label
-* **Does not delete anything**
-* Lets you review messages directly in Gmail UI
+Does not delete anything.
 
 ---
 
-### 3. Export a report (optional but recommended)
+## 3. Export Report (Optional)
 
 ```bash
 gmail-cleanup export \
   --label cleanup/candidates \
-  --out reports/bookbeat.csv \
-  --limit 200
+  --out reports/bookbeat.csv
 ```
-
-Exports:
-
-* message id
-* date
-* from
-* to
-* subject
-
-Good for auditing before destructive actions.
 
 ---
 
-### 4. Trash (recoverable, guarded)
+## 4. Trash (Guarded & Recoverable)
 
 ```bash
 gmail-cleanup trash \
@@ -259,75 +303,76 @@ gmail-cleanup trash \
 
 Safety checks:
 
-* Only allows labels starting with `cleanup/`
-* Shows counts + samples
+* Label must start with `cleanup/`
 * Requires `--execute`
-* Requires typed confirmation: `TRASH <count>`
-* Moves to **Trash** (recoverable)
+* Requires typed confirmation
+* Moves to Trash (recoverable)
 
 ---
 
-## Commands overview
+# Safety Guarantees
 
-```text
-gmail-cleanup query   # preview counts + samples (dry-run)
-gmail-cleanup label   # apply staging labels
-gmail-cleanup export  # export CSV / JSON reports
-gmail-cleanup trash   # move labeled emails to Trash
-gmail-cleanup doctor  # diagnose local setup
-```
-
-Run `--help` on any command for details.
-
----
-
-## Safety guarantees
-
-* ❌ No deletion without a label
+* ❌ No deletion without label
 * ❌ No deletion without `--execute`
 * ❌ No deletion without typed confirmation
-* ❌ No permanent delete (yet)
-* ✅ Trash is recoverable via Gmail
+* ❌ No permanent delete
+* ✅ Trash is recoverable
 
-This tool is intentionally conservative.
-
----
-
-## File locations (important)
-
-Nothing sensitive is stored in the repo.
-
-| File             | Location                      |
-| ---------------- | ----------------------------- |
-| credentials.json | App data folder               |
-| token.json       | App data folder               |
-| reports          | Local folder (ignored by git) |
+Safety enforcement lives server-side and in shared core.
 
 ---
 
-## Roadmap (planned)
+# Production Behavior Notes
 
-* Permanent delete (opt-in, extra confirmation)
-* Attachment size / type filters
+* Session cookies hardened when `APP_ENV=production`
+* OAuth state validation enforced
+* Refresh tokens encrypted at rest
+* No secrets committed to repository
+
+---
+
+# Testing Policy
+
+* Tests never call Google endpoints
+* Playwright mocks `/api/*`
+* CLI safety rules tested
+* `task test` must pass before merge
+
+---
+
+# Public Repository Rules
+
+This repository:
+
+* Contains no secrets
+* Contains no credentials
+* Contains no tokens
+* Contains no database files
+* Is safe to clone publicly
+
+Only `.env.example` files may be committed.
+
+---
+
+# Roadmap
+
+* Permanent delete (extra confirmation)
+* Attachment filters
 * Label cleanup helpers
-* Config file support
-* Batch undo helpers
+* Undo helpers
+* Cloud deployment hardening
+* CI pipeline automation
 
 ---
 
-## License
-
-MIT — do whatever you want, responsibly.
-
----
-
-## Philosophy
+# Philosophy
 
 Inbox cleanup should be:
 
 * intentional
 * reversible
 * inspectable
+* safe by default
 
 If a tool makes it easy to delete the wrong thing, it’s a bad tool.
 
