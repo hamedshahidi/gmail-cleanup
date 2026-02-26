@@ -69,7 +69,7 @@ Next.js UI → FastAPI API → shared core → Gmail API
 
 ---
 
-# Phase 3 — Documentation & Repo Hygiene (In Progress)
+# Phase 3 — Documentation & Repo Hygiene (Completed)
 
 ## Task007 — README Normalization & Documentation Alignment
 - Normalize root README
@@ -82,8 +82,6 @@ Next.js UI → FastAPI API → shared core → Gmail API
   - Dev vs production behavior
   - OAuth setup notes
 - Ensure documentation matches security hardening
-
-Status: 🔄 In Progress
 
 ---
 
