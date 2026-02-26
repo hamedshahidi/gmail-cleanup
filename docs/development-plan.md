@@ -85,16 +85,16 @@ Next.js UI → FastAPI API → shared core → Gmail API
 
 ---
 
-# Phase 4 — Gmail Message Listing (Read-Only)
+# Phase 4 — Gmail Message Listing (Read-Only) (Completed)
 
-## Task008 — Backend Contract (Stage A) (Completed)
+## Task008 — Backend Contract (Stage A)
 - Add `GET /accounts/{id}/messages`
 - Enforce account ownership
 - Introduce service abstraction
 - Return normalized message DTO
 - Add unit tests (no Google calls)
 
-## Task009 — Gmail Integration (Stage B) (Completed & Verified)
+## Task009 — Gmail Integration (Stage B)
 - Decrypt refresh token
 - Build Gmail client via factory
 - Call Gmail API
@@ -104,7 +104,7 @@ Next.js UI → FastAPI API → shared core → Gmail API
 - Mock Gmail client in tests
 - End-to-end manual verification successful
 
-## Task010 — Next.js Proxy (Completed)
+## Task010 — Next.js Proxy
 - Add `/api/accounts/[id]/messages` route
 - Forward cookies
 - Forward status codes
@@ -120,31 +120,43 @@ Next.js UI → FastAPI API → shared core → Gmail API
 
 ---
 
-# Future Phases (Planned)
+# Phase 5 — Quality & Confidence
 
-## Cleanup Workflow Integration
-- Query → Label → Export → Trash via Web UI
-- Enforce safety rules server-side
+## Task012 — Playwright E2E (Mode A) (Completed)
+- Added Playwright setup in `apps/web`
+- Added E2E tests with `/api/*` request mocking only
+- Covered `/accounts` rendering
+- Covered account details navigation
+- Covered messages rendering
+- Covered messages 404/400 error states
+- Covered loading state with delayed mocked response
+- No FastAPI or Google calls in E2E tests
+
+---
+
+# Phase 6 — Cleanup Workflow (Planned)
+
+## Query → Label → Export → Trash via Web UI
 - Preview mode before execution
+- Enforce safety rules server-side
+- Require explicit confirmation before trash
+- Maintain recoverable trash-only policy
 
-## Multi-Account Enhancements
+---
+
+# Phase 7 — Multi-Account Enhancements (Planned)
+
 - Improved account display
 - Last sync time
 - Reconnect flow
+- Token health indicators
 
-## Deployment Readiness
+---
+
+# Phase 8 — Deployment Readiness (Planned)
+
 - Cloud configuration guide
 - HTTPS cookie verification
 - CI enforcement
 - Migration workflow hardening
-
----
-
-# Ongoing Rules
-
-- All safety enforcement remains server-side.
-- Tests must never call Google endpoints.
-- CLI must remain fully functional.
-- Minimal, incremental, additive changes only.
-- No secrets committed.
-- This file must be updated when any task is completed.
+- Production session validation checks
