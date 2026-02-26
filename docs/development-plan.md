@@ -87,7 +87,7 @@ Next.js UI → FastAPI API → shared core → Gmail API
 
 # Phase 4 — Gmail Message Listing (Read-Only)
 
-## Task008 — Backend Contract (Stage A)
+## Task008 — Backend Contract (Stage A) (Completed)
 - Add `GET /accounts/{id}/messages`
 - Enforce account ownership
 - Introduce service abstraction

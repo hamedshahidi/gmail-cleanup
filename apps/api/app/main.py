@@ -12,8 +12,10 @@ from .auth import get_or_create_current_user
 from .db import get_db
 from .models import GoogleAccount
 from .oauth import build_google_flow, fetch_google_userinfo
+from .schemas.messages import AccountMessage
 from .security import TokenEncryptionError, encrypt_refresh_token
 from .settings import get_settings
+from .services.account_messages_service import AccountMessagesService, AccountNotFoundOrNotOwnedError
 
 
 settings = get_settings()
@@ -148,6 +150,24 @@ def logout(request: Request) -> JSONResponse:
     resp = JSONResponse({"logged_out": True})
     resp.delete_cookie("session")
     return resp
+
+
+def get_account_messages_service(db: Session = Depends(get_db)) -> AccountMessagesService:
+    return AccountMessagesService(db)
+
+
+@app.get("/accounts/{account_id}/messages", response_model=list[AccountMessage])
+def list_account_messages(
+    account_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    service: AccountMessagesService = Depends(get_account_messages_service),
+) -> list[AccountMessage]:
+    current_user = get_or_create_current_user(request, db)
+    try:
+        return service.list_messages(current_user_id=current_user.id, account_id=account_id)
+    except AccountNotFoundOrNotOwnedError as exc:
+        raise HTTPException(status_code=404, detail="Account not found") from exc
 
 
 @app.delete("/accounts/{account_id}")
