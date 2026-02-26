@@ -94,7 +94,7 @@ Next.js UI → FastAPI API → shared core → Gmail API
 - Return normalized message DTO
 - Add unit tests (no Google calls)
 
-## Task009 — Gmail Integration (Stage B) (Implementation Complete, Verification Pending)
+## Task009 — Gmail Integration (Stage B) (Completed & Verified)
 - Decrypt refresh token
 - Build Gmail client via factory
 - Call Gmail API
@@ -102,15 +102,14 @@ Next.js UI → FastAPI API → shared core → Gmail API
 - Limit to 10 messages
 - Return 400 on token issues
 - Mock Gmail client in tests
-- Tests passing
-- Manual verification pending (requires proxy route)
+- End-to-end manual verification successful
 
-## Task010 — Next.js Proxy for Messages (Infrastructure)
+## Task010 — Next.js Proxy (Completed)
 - Add `/api/accounts/[id]/messages` route
 - Forward cookies
 - Forward status codes
 - Forward response body
-- No UI changes
+- Verified end-to-end
 
 ## Task011 — UI Integration (Stage C)
 - Add "View Messages" button
