@@ -15,7 +15,12 @@ from .oauth import build_google_flow, fetch_google_userinfo
 from .schemas.messages import AccountMessage
 from .security import TokenEncryptionError, encrypt_refresh_token
 from .settings import get_settings
-from .services.account_messages_service import AccountMessagesService, AccountNotFoundOrNotOwnedError
+from .services.account_messages_service import (
+    AccountMessagesService,
+    AccountNotFoundOrNotOwnedError,
+    AccountTokenInvalidError,
+)
+from .services.gmail_client import GmailClientFactory
 
 
 settings = get_settings()
@@ -152,8 +157,22 @@ def logout(request: Request) -> JSONResponse:
     return resp
 
 
-def get_account_messages_service(db: Session = Depends(get_db)) -> AccountMessagesService:
-    return AccountMessagesService(db)
+def get_gmail_client_factory() -> GmailClientFactory:
+    return GmailClientFactory(
+        client_id=settings.google_client_id,
+        client_secret=settings.google_client_secret,
+    )
+
+
+def get_account_messages_service(
+    db: Session = Depends(get_db),
+    gmail_client_factory: GmailClientFactory = Depends(get_gmail_client_factory),
+) -> AccountMessagesService:
+    return AccountMessagesService(
+        db=db,
+        token_enc_key=settings.token_enc_key,
+        gmail_client_factory=gmail_client_factory,
+    )
 
 
 @app.get("/accounts/{account_id}/messages", response_model=list[AccountMessage])
@@ -168,6 +187,8 @@ def list_account_messages(
         return service.list_messages(current_user_id=current_user.id, account_id=account_id)
     except AccountNotFoundOrNotOwnedError as exc:
         raise HTTPException(status_code=404, detail="Account not found") from exc
+    except AccountTokenInvalidError as exc:
+        raise HTTPException(status_code=400, detail="Account token invalid") from exc
 
 
 @app.delete("/accounts/{account_id}")

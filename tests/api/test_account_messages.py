@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 import app.main as main_module
 from app.schemas.messages import AccountMessage
-from app.services.account_messages_service import AccountNotFoundOrNotOwnedError
+from app.services.account_messages_service import AccountNotFoundOrNotOwnedError, AccountTokenInvalidError
 
 
 class _StubMessagesService:
@@ -29,6 +29,11 @@ class _StubMessagesService:
 class _NotFoundMessagesService:
     def list_messages(self, *, current_user_id: int, account_id: int) -> list[AccountMessage]:
         raise AccountNotFoundOrNotOwnedError("missing")
+
+
+class _InvalidTokenMessagesService:
+    def list_messages(self, *, current_user_id: int, account_id: int) -> list[AccountMessage]:
+        raise AccountTokenInvalidError("invalid token")
 
 
 def test_account_messages_route_returns_response_model_shape(client: TestClient) -> None:
@@ -68,3 +73,18 @@ def test_account_messages_route_returns_404_when_service_reports_missing_or_unow
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Account not found"}
+
+
+def test_account_messages_route_returns_400_when_service_reports_invalid_token(
+    client: TestClient,
+) -> None:
+    main_module.app.dependency_overrides[main_module.get_account_messages_service] = (
+        lambda: _InvalidTokenMessagesService()
+    )
+    try:
+        response = client.get("/accounts/999/messages")
+    finally:
+        main_module.app.dependency_overrides.pop(main_module.get_account_messages_service, None)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Account token invalid"}
