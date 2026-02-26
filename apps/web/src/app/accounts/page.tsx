@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 type Account = {
@@ -117,6 +118,7 @@ export default function AccountsPage() {
             {data.accounts.map((account) => (
               <li key={account.id}>
                 {account.email}{" "}
+                <Link href={`/accounts/${account.id}`}>View messages</Link>{" "}
                 <button onClick={() => disconnectAccount(account.id)} disabled={actionLoading}>
                   Disconnect
                 </button>
